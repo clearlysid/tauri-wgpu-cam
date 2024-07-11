@@ -3,7 +3,7 @@
 
 use std::{borrow::Cow, sync::Mutex};
 
-use tauri::{async_runtime::block_on, Manager, RunEvent, WindowEvent};
+use tauri::{async_runtime::block_on, Manager, RunEvent, WebviewWindowBuilder, WindowEvent};
 
 // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
 #[tauri::command]
@@ -14,10 +14,19 @@ fn greet(name: &str) -> String {
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
-            let window = app.get_webview_window("main").unwrap();
+            // Step 1: Create a window and get it's size
+            let window = WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("/".into()))
+                .inner_size(1920.0, 1080.0)
+                .build()
+                .expect("couldn't build window");
+
             let size = window.inner_size()?;
 
-            let instance = wgpu::Instance::default();
+            // Step 2: Create a WGPU instance, surface and adapter
+            let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+                backends: wgpu::Backends::PRIMARY,
+                ..Default::default()
+            });
 
             let surface = instance.create_surface(window).unwrap();
             let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
@@ -28,7 +37,7 @@ fn main() {
             }))
             .expect("Failed to find an appropriate adapter");
 
-            // Create the logical device and command queue
+            // Step 3: Get WGPU device and queue
             let (device, queue) = block_on(
                 adapter.request_device(
                     &wgpu::DeviceDescriptor {
@@ -48,18 +57,18 @@ fn main() {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
                     r#"
-@vertex
-fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> @builtin(position) vec4<f32> {
-    let x = f32(i32(in_vertex_index) - 1);
-    let y = f32(i32(in_vertex_index & 1u) * 2 - 1);
-    return vec4<f32>(x, y, 0.0, 1.0);
-}
+                        @vertex
+                        fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> @builtin(position) vec4<f32> {
+                            let x = f32(i32(in_vertex_index) - 1);
+                            let y = f32(i32(in_vertex_index & 1u) * 2 - 1);
+                            return vec4<f32>(x, y, 0.0, 1.0);
+                        }
 
-@fragment
-fn fs_main() -> @location(0) vec4<f32> {
-    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
-}
-"#,
+                        @fragment
+                        fn fs_main() -> @location(0) vec4<f32> {
+                            return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+                        }
+                        "#,
                 )),
             });
 
@@ -79,11 +88,17 @@ fn fs_main() -> @location(0) vec4<f32> {
                     module: &shader,
                     entry_point: "vs_main",
                     buffers: &[],
+                    compilation_options: wgpu::PipelineCompilationOptions {
+                        ..Default::default()
+                    },
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
                     entry_point: "fs_main",
                     targets: &[Some(swapchain_format.into())],
+                    compilation_options: wgpu::PipelineCompilationOptions {
+                        ..Default::default()
+                    },
                 }),
                 primitive: wgpu::PrimitiveState::default(),
                 depth_stencil: None,
