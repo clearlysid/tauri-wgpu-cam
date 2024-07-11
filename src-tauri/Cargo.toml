@@ -14,10 +14,11 @@ tauri-build = { git = "https://github.com/tauri-apps/tauri", branch = "dev", fea
 
 [dependencies]
 tauri = { git = "https://github.com/tauri-apps/tauri", branch = "dev", features = ["macos-private-api"] }
-nokhwa = { git = "https://github.com/helmerapp/nokhwa", branch = "0.10", features = ["input-native", "output-wgpu"] }
+nokhwa = { git = "https://github.com/helmerapp/nokhwa", branch = "0.10", features = ["input-native"] }
 serde_json = "1.0"
 pretty_env_logger = "0"
 wgpu = "0.20"
+rayon = "1.10.0"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem
