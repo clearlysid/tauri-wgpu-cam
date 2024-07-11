@@ -1,10 +1,11 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod utils;
+
 use nokhwa::pixel_format::RgbAFormat;
-use nokhwa::utils::{RequestedFormat, RequestedFormatType};
-use nokhwa::{native_api_backend, query, Camera};
-use std::{borrow::Cow, sync::Mutex};
+
+use std::sync::Mutex;
 use tauri::{async_runtime, Manager, RunEvent, WindowEvent};
 
 fn main() {
@@ -25,7 +26,6 @@ fn main() {
                 async_runtime::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
                     power_preference: wgpu::PowerPreference::default(),
                     force_fallback_adapter: false,
-                    // Request an adapter which can render to our surface
                     compatible_surface: Some(&surface),
                 }))
                 .expect("Failed to find an appropriate adapter");
@@ -46,24 +46,7 @@ fn main() {
             .expect("Failed to create device");
 
             // Load the shaders from disk
-            let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
-                    r#"
-@vertex
-fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> @builtin(position) vec4<f32> {
-    let x = f32(i32(in_vertex_index) - 1);
-    let y = f32(i32(in_vertex_index & 1u) * 2 - 1);
-    return vec4<f32>(x, y, 0.0, 1.0);
-}
-
-@fragment
-fn fs_main() -> @location(0) vec4<f32> {
-    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
-}
-"#,
-                )),
-            });
+            let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
             let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: None,
@@ -131,7 +114,7 @@ fn fs_main() -> @location(0) vec4<f32> {
                     let app_clone = app_handle.clone();
 
                     async_runtime::spawn(async move {
-                        let mut camera = create_camera();
+                        let mut camera = utils::create_camera();
 
                         // Open the camera stream
                         camera.open_stream().expect("Could not open stream");
@@ -214,14 +197,4 @@ fn fs_main() -> @location(0) vec4<f32> {
                 _ => (),
             }
         });
-}
-
-fn create_camera() -> Camera {
-    let backend = native_api_backend().expect("Could not get backend");
-    let devices = query(backend).expect("Could not query backend");
-    let device = devices.first().expect("No devices found");
-
-    let format = RequestedFormat::new::<RgbAFormat>(RequestedFormatType::AbsoluteHighestResolution);
-
-    Camera::new(device.index().to_owned(), format).expect("Could not create camera")
 }
