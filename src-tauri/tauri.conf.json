@@ -24,9 +24,9 @@
       {
         "fullscreen": false,
         "resizable": true,
-        "title": "alpha-desktop",
-        "width": 800,
-        "height": 600,
+        "title": "beta-desktop",
+        "width": 640,
+        "height": 360,
         "decorations": true,
         "transparent": true
       }
