@@ -1,25 +1,17 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use nokhwa::pixel_format::RgbAFormat;
+use nokhwa::utils::{RequestedFormat, RequestedFormatType};
+use nokhwa::{native_api_backend, query, Camera};
 use std::{borrow::Cow, sync::Mutex};
-
-use tauri::{async_runtime::block_on, Manager, RunEvent, WebviewWindowBuilder, WindowEvent};
-
-// Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+use tauri::{async_runtime, Manager, RunEvent, WindowEvent};
 
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
-            // Step 1: Create a window and get it's size
-            let window = WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("/".into()))
-                .inner_size(1920.0, 1080.0)
-                .build()
-                .expect("couldn't build window");
-
+            // Step 1: Create a window
+            let window = app.get_webview_window("main").unwrap();
             let size = window.inner_size()?;
 
             // Step 2: Create a WGPU instance, surface and adapter
@@ -29,16 +21,17 @@ fn main() {
             });
 
             let surface = instance.create_surface(window).unwrap();
-            let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                force_fallback_adapter: false,
-                // Request an adapter which can render to our surface
-                compatible_surface: Some(&surface),
-            }))
-            .expect("Failed to find an appropriate adapter");
+            let adapter =
+                async_runtime::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::default(),
+                    force_fallback_adapter: false,
+                    // Request an adapter which can render to our surface
+                    compatible_surface: Some(&surface),
+                }))
+                .expect("Failed to find an appropriate adapter");
 
-            // Step 3: Get WGPU device and queue
-            let (device, queue) = block_on(
+            // Create the logical device and command queue
+            let (device, queue) = async_runtime::block_on(
                 adapter.request_device(
                     &wgpu::DeviceDescriptor {
                         label: None,
@@ -57,18 +50,18 @@ fn main() {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
                     r#"
-                        @vertex
-                        fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> @builtin(position) vec4<f32> {
-                            let x = f32(i32(in_vertex_index) - 1);
-                            let y = f32(i32(in_vertex_index & 1u) * 2 - 1);
-                            return vec4<f32>(x, y, 0.0, 1.0);
-                        }
+@vertex
+fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> @builtin(position) vec4<f32> {
+    let x = f32(i32(in_vertex_index) - 1);
+    let y = f32(i32(in_vertex_index & 1u) * 2 - 1);
+    return vec4<f32>(x, y, 0.0, 1.0);
+}
 
-                        @fragment
-                        fn fs_main() -> @location(0) vec4<f32> {
-                            return vec4<f32>(1.0, 0.0, 0.0, 1.0);
-                        }
-                        "#,
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
+"#,
                 )),
             });
 
@@ -127,11 +120,43 @@ fn main() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
             match event {
+                RunEvent::Ready => {
+                    println!("Ready");
+
+                    let app_clone = app_handle.clone();
+
+                    async_runtime::spawn(async move {
+                        let mut camera = create_camera();
+
+                        // Open the camera stream
+                        camera.open_stream().expect("Could not open stream");
+
+                        // wait 100ms
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+
+                        for i in 0..100 {
+                            // let frame = camera.frame().expect("Could not get frame");
+                            // let format = frame.source_frame_format().to_string();
+                            // println!("Frame {i}: {format}");
+
+                            let device = app_clone.state();
+                            let queue = app_clone.state();
+
+                            let wgpu_frame = camera
+                                .frame_texture::<RgbAFormat>(&device, &queue, None)
+                                .expect("couldn't get texture");
+
+                            println!("Frame {i}: {:?}", wgpu_frame.width());
+                        }
+
+                        camera.stop_stream().expect("Could not stop stream");
+                    });
+                }
                 RunEvent::WindowEvent {
                     label: _,
                     event: WindowEvent::Resized(size),
@@ -189,4 +214,14 @@ fn main() {
                 _ => (),
             }
         });
+}
+
+fn create_camera() -> Camera {
+    let backend = native_api_backend().expect("Could not get backend");
+    let devices = query(backend).expect("Could not query backend");
+    let device = devices.first().expect("No devices found");
+
+    let format = RequestedFormat::new::<RgbAFormat>(RequestedFormatType::AbsoluteHighestResolution);
+
+    Camera::new(device.index().to_owned(), format).expect("Could not create camera")
 }
