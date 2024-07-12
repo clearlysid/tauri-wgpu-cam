@@ -24,12 +24,26 @@
       {
         "fullscreen": false,
         "resizable": true,
-        "title": "beta-desktop",
+        "title": "Tauri WGPU Camera Demo",
         "width": 640,
         "height": 360,
         "decorations": true,
-        "transparent": true
+        "transparent": true,
+        "titleBarStyle": "Overlay"
       }
-    ]
+    ],
+    "security": {
+      "capabilities": [
+        {
+          "identifier": "drag-start",
+          "windows": [
+            "*"
+          ],
+          "permissions": [
+            "window:allow-start-dragging"
+          ]
+        }
+      ]
+    }
   }
 }

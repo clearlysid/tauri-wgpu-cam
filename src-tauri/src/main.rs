@@ -1,10 +1,11 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod utils;
+
 use nokhwa::pixel_format::RgbAFormat;
-use nokhwa::utils::{RequestedFormat, RequestedFormatType};
-use nokhwa::{native_api_backend, query, Camera};
-use std::{borrow::Cow, sync::Mutex};
+
+use std::sync::Mutex;
 use tauri::{async_runtime, Manager, RunEvent, WindowEvent};
 
 fn main() {
@@ -39,28 +40,8 @@ fn main() {
             )
             .expect("Failed to create device");
 
-            // Create shader that accepts a texture and sampler
-            let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
-                    r#"
-            @group(0) @binding(0) var my_texture: texture_2d<f32>;
-            @group(0) @binding(1) var my_sampler: sampler;
-            
-            @vertex
-            fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> @builtin(position) vec4<f32> {
-                let x = f32(i32(in_vertex_index) - 1);
-                let y = f32(i32(in_vertex_index & 1u) * 2 - 1);
-                return vec4<f32>(x, y, 0.0, 1.0);
-            }
-            
-            @fragment
-            fn fs_main() -> @location(0) vec4<f32> {
-                return textureSample(my_texture, my_sampler, vec2<f32>(0.5, 0.5));
-            }
-            "#,
-                )),
-            });
+            // Load the shaders from disk
+            let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
             let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
                 address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -159,7 +140,9 @@ fn main() {
                     let app_clone = app_handle.clone();
 
                     async_runtime::spawn(async move {
-                        let mut camera = create_camera();
+                        let mut camera = utils::create_camera();
+
+                        // Open the camera stream
                         camera.open_stream().expect("Could not open stream");
 
                         // std::thread::sleep(std::time::Duration::from_secs(3));
@@ -298,14 +281,4 @@ fn main() {
                 _ => (),
             }
         });
-}
-
-fn create_camera() -> Camera {
-    let backend = native_api_backend().expect("Could not get backend");
-    let devices = query(backend).expect("Could not query backend");
-    let device = devices.first().expect("No devices found");
-
-    let format = RequestedFormat::new::<RgbAFormat>(RequestedFormatType::AbsoluteHighestResolution);
-
-    Camera::new(device.index().to_owned(), format).expect("Could not create camera")
 }
