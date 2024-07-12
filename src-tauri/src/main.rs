@@ -78,7 +78,6 @@ fn main() {
             let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: None,
                 push_constant_ranges: &[],
-                // bind_group_layouts: &[],
                 bind_group_layouts: &[&bind_group_layout],
             });
 
@@ -213,10 +212,6 @@ fn main() {
                             let device = app_clone.state::<wgpu::Device>();
                             let surface = app_clone.state::<wgpu::Surface>();
                             let render_pipeline = app_clone.state::<wgpu::RenderPipeline>();
-
-                            //////
-                            // this errors out
-                            // let bind_group = rx.recv().unwrap();
 
                             let output = surface
                                 .get_current_texture()
