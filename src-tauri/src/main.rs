@@ -4,7 +4,6 @@
 mod utils;
 
 use nokhwa::pixel_format::RgbAFormat;
-
 use std::sync::Mutex;
 use tauri::{async_runtime, Manager, RunEvent, WindowEvent};
 
@@ -44,12 +43,12 @@ fn main() {
             let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
             // let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            //     address_mode_u: wgpu::AddressMode::ClampToEdge,
-            //     address_mode_v: wgpu::AddressMode::ClampToEdge,
-            //     address_mode_w: wgpu::AddressMode::ClampToEdge,
             //     mag_filter: wgpu::FilterMode::Linear,
             //     min_filter: wgpu::FilterMode::Linear,
             //     mipmap_filter: wgpu::FilterMode::Nearest,
+            //     address_mode_u: wgpu::AddressMode::ClampToEdge,
+            //     address_mode_v: wgpu::AddressMode::ClampToEdge,
+            //     address_mode_w: wgpu::AddressMode::ClampToEdge,
             //     ..Default::default()
             // });
 
@@ -78,9 +77,9 @@ fn main() {
 
             let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: None,
+                push_constant_ranges: &[],
                 bind_group_layouts: &[],
                 // bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
             });
 
             let swapchain_capabilities = surface.get_capabilities(&adapter);
@@ -88,7 +87,11 @@ fn main() {
 
             let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: None,
+                multiview: None,
+                depth_stencil: None,
                 layout: Some(&pipeline_layout),
+                primitive: wgpu::PrimitiveState::default(),
+                multisample: wgpu::MultisampleState::default(),
                 vertex: wgpu::VertexState {
                     module: &shader,
                     entry_point: "vs_main",
@@ -101,30 +104,27 @@ fn main() {
                     targets: &[Some(swapchain_format.into())],
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                 }),
-                primitive: wgpu::PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState::default(),
-                multiview: None,
             });
 
             let config = wgpu::SurfaceConfiguration {
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                format: swapchain_format,
                 width: size.width,
                 height: size.height,
-                present_mode: wgpu::PresentMode::Fifo,
-                alpha_mode: swapchain_capabilities.alpha_modes[0],
                 view_formats: vec![],
+                format: swapchain_format,
                 desired_maximum_frame_latency: 2,
+                present_mode: wgpu::PresentMode::Fifo,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                alpha_mode: swapchain_capabilities.alpha_modes[0],
             };
 
             surface.configure(&device, &config);
 
+            app.manage(queue);
+            app.manage(device);
             app.manage(surface);
             app.manage(render_pipeline);
-            app.manage(device);
-            app.manage(queue);
             app.manage(Mutex::new(config));
+            
             // app.manage(sampler);
             // app.manage(bind_group_layout);
 
@@ -163,28 +163,28 @@ fn main() {
 
                             let texture = device.create_texture(&wgpu::TextureDescriptor {
                                 label: None,
-                                size: texture_size,
-                                mip_level_count: 1,
                                 sample_count: 1,
+                                mip_level_count: 1,
+                                size: texture_size,
+                                view_formats: &[],
                                 dimension: wgpu::TextureDimension::D2,
                                 format: wgpu::TextureFormat::Rgba8UnormSrgb,
                                 usage: wgpu::TextureUsages::TEXTURE_BINDING
                                     | wgpu::TextureUsages::COPY_DST,
-                                view_formats: &[],
                             });
 
                             queue.write_texture(
                                 wgpu::ImageCopyTexture {
-                                    texture: &texture,
                                     mip_level: 0,
+                                    texture: &texture,
                                     origin: wgpu::Origin3d::ZERO,
                                     aspect: wgpu::TextureAspect::All,
                                 },
                                 &frame,
                                 wgpu::ImageDataLayout {
                                     offset: 0,
-                                    bytes_per_row: Some(4 * frame.width()),
                                     rows_per_image: Some(frame.height()),
+                                    bytes_per_row: Some(4 * frame.width()),
                                 },
                                 texture_size,
                             );
@@ -214,6 +214,7 @@ fn main() {
                         }
 
                         camera.stop_stream().expect("Could not stop stream");
+                        println!("Camera Stream Stopped");
                     });
                 }
                 RunEvent::WindowEvent {
@@ -221,9 +222,9 @@ fn main() {
                     event: WindowEvent::Resized(size),
                     ..
                 } => {
-                    let config = app_handle.state::<Mutex<wgpu::SurfaceConfiguration>>();
-                    let surface = app_handle.state::<wgpu::Surface>();
                     let device = app_handle.state::<wgpu::Device>();
+                    let surface = app_handle.state::<wgpu::Surface>();
+                    let config = app_handle.state::<Mutex<wgpu::SurfaceConfiguration>>();
 
                     let mut config = config.lock().unwrap();
                     config.width = if size.width > 0 { size.width } else { 1 };
@@ -263,9 +264,9 @@ fn main() {
                                     store: wgpu::StoreOp::Store,
                                 },
                             })],
-                            depth_stencil_attachment: None,
                             timestamp_writes: None,
                             occlusion_query_set: None,
+                            depth_stencil_attachment: None,
                         });
                         rpass.set_pipeline(&render_pipeline);
                         // rpass.set_bind_group(0, &bind_group, &[]);
