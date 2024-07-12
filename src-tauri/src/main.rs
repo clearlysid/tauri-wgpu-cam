@@ -15,7 +15,7 @@ fn main() {
             let window = app.get_webview_window("main").unwrap();
             let size = window.inner_size()?;
 
-            // Create a WGPU instance, surface and adapter
+            // Create a WGPU instance, adapter and surface (using window)
             let instance = wgpu::Instance::default();
             let surface = instance.create_surface(window).unwrap();
             let adapter =
@@ -43,42 +43,43 @@ fn main() {
             // Load the shaders from disk
             let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
-            let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-                address_mode_u: wgpu::AddressMode::ClampToEdge,
-                address_mode_v: wgpu::AddressMode::ClampToEdge,
-                address_mode_w: wgpu::AddressMode::ClampToEdge,
-                mag_filter: wgpu::FilterMode::Linear,
-                min_filter: wgpu::FilterMode::Linear,
-                mipmap_filter: wgpu::FilterMode::Nearest,
-                ..Default::default()
-            });
+            // let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            //     address_mode_u: wgpu::AddressMode::ClampToEdge,
+            //     address_mode_v: wgpu::AddressMode::ClampToEdge,
+            //     address_mode_w: wgpu::AddressMode::ClampToEdge,
+            //     mag_filter: wgpu::FilterMode::Linear,
+            //     min_filter: wgpu::FilterMode::Linear,
+            //     mipmap_filter: wgpu::FilterMode::Nearest,
+            //     ..Default::default()
+            // });
 
-            let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-                label: None,
-            });
-            
+            // let bind_group_layout =
+            //     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            //         entries: &[
+            //             wgpu::BindGroupLayoutEntry {
+            //                 binding: 0,
+            //                 visibility: wgpu::ShaderStages::FRAGMENT,
+            //                 ty: wgpu::BindingType::Texture {
+            //                     multisampled: false,
+            //                     view_dimension: wgpu::TextureViewDimension::D2,
+            //                     sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            //                 },
+            //                 count: None,
+            //             },
+            //             wgpu::BindGroupLayoutEntry {
+            //                 binding: 1,
+            //                 visibility: wgpu::ShaderStages::FRAGMENT,
+            //                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            //                 count: None,
+            //             },
+            //         ],
+            //         label: Some("bind_group_layout"),
+            //     });
 
             let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: None,
-                bind_group_layouts: &[&bind_group_layout],
+                bind_group_layouts: &[],
+                // bind_group_layouts: &[&bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -116,16 +117,16 @@ fn main() {
                 view_formats: vec![],
                 desired_maximum_frame_latency: 2,
             };
-            
+
             surface.configure(&device, &config);
-            
-            app.manage(bind_group_layout);
+
             app.manage(surface);
             app.manage(render_pipeline);
             app.manage(device);
             app.manage(queue);
             app.manage(Mutex::new(config));
-            app.manage(sampler);
+            // app.manage(sampler);
+            // app.manage(bind_group_layout);
 
             Ok(())
         })
@@ -135,8 +136,6 @@ fn main() {
         .run(|app_handle, event| {
             match event {
                 RunEvent::Ready => {
-                    println!("Ready");
-
                     let app_clone = app_handle.clone();
 
                     async_runtime::spawn(async move {
@@ -145,21 +144,23 @@ fn main() {
                         // Open the camera stream
                         camera.open_stream().expect("Could not open stream");
 
-                        // std::thread::sleep(std::time::Duration::from_secs(3));
+                        std::thread::sleep(std::time::Duration::from_secs(1));
 
                         for i in 0..100 {
-                            let frame = camera.frame().expect("Could not get frame");
+                            let buffer = camera.frame().expect("Could not get frame");
                             let device = app_clone.state::<wgpu::Device>();
                             let queue = app_clone.state::<wgpu::Queue>();
-                        
-                            let frame = frame.decode_image::<RgbAFormat>().expect("Could not decode frame");
-                        
+
+                            let frame = buffer
+                                .decode_image::<RgbAFormat>()
+                                .expect("Could not decode frame");
+
                             let texture_size = wgpu::Extent3d {
                                 width: frame.width(),
                                 height: frame.height(),
                                 depth_or_array_layers: 1,
                             };
-                        
+
                             let texture = device.create_texture(&wgpu::TextureDescriptor {
                                 label: None,
                                 size: texture_size,
@@ -167,10 +168,11 @@ fn main() {
                                 sample_count: 1,
                                 dimension: wgpu::TextureDimension::D2,
                                 format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                                    | wgpu::TextureUsages::COPY_DST,
                                 view_formats: &[],
                             });
-                        
+
                             queue.write_texture(
                                 wgpu::ImageCopyTexture {
                                     texture: &texture,
@@ -186,30 +188,29 @@ fn main() {
                                 },
                                 texture_size,
                             );
-                        
-                            let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-                            let sampler = app_clone.state::<wgpu::Sampler>();
-                            let bind_group_layout = app_clone.state::<wgpu::BindGroupLayout>();
-                        
-                            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                                layout: &bind_group_layout,
-                                entries: &[
-                                    wgpu::BindGroupEntry {
-                                        binding: 0,
-                                        resource: wgpu::BindingResource::TextureView(&texture_view),
-                                    },
-                                    wgpu::BindGroupEntry {
-                                        binding: 1,
-                                        resource: wgpu::BindingResource::Sampler(&sampler),
-                                    },
-                                ],
-                                label: None,
-                            });
-                        
-                            let test = app_clone.manage(Some(bind_group));
-                            println!("{:?}", test);
-                        
-                            println!("Frame {i}");                        
+
+                            // let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                            // let sampler = app_clone.state::<wgpu::Sampler>();
+                            // let bind_group_layout = app_clone.state::<wgpu::BindGroupLayout>();
+
+                            // let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                            //     layout: &bind_group_layout,
+                            //     entries: &[
+                            //         wgpu::BindGroupEntry {
+                            //             binding: 0,
+                            //             resource: wgpu::BindingResource::TextureView(&texture_view),
+                            //         },
+                            //         wgpu::BindGroupEntry {
+                            //             binding: 1,
+                            //             resource: wgpu::BindingResource::Sampler(&sampler),
+                            //         },
+                            //     ],
+                            //     label: None,
+                            // });
+
+                            // app_clone.manage(Some(bind_group));
+
+                            println!("Frame {i}");
                         }
 
                         camera.stop_stream().expect("Could not stop stream");
@@ -229,22 +230,18 @@ fn main() {
                     config.height = if size.height > 0 { size.height } else { 1 };
                     surface.configure(&device, &config)
 
-                    // TODO: Request redraw on macos (not exposed in tauri yet).
+                    // TODO: Request redraw on macos (not exposed in taurip yet).
                 }
                 RunEvent::MainEventsCleared => {
-                    println!("MainEventsCleared");
+                    // println!("MainEventsCleared");
 
-                    let bind_group = app_handle.state::<wgpu::BindGroup>();
-
-                    println!("Drawing");
-
+                    let queue = app_handle.state::<wgpu::Queue>();
+                    let device = app_handle.state::<wgpu::Device>();
                     let surface = app_handle.state::<wgpu::Surface>();
                     let render_pipeline = app_handle.state::<wgpu::RenderPipeline>();
-                    let device = app_handle.state::<wgpu::Device>();
-                    let queue = app_handle.state::<wgpu::Queue>();
 
                     // this errors out
-                   
+                    // let bind_group = app_handle.state::<wgpu::BindGroup>();
 
                     let output = surface
                         .get_current_texture()
@@ -271,7 +268,7 @@ fn main() {
                             occlusion_query_set: None,
                         });
                         rpass.set_pipeline(&render_pipeline);
-                        rpass.set_bind_group(0, &bind_group, &[]);
+                        // rpass.set_bind_group(0, &bind_group, &[]);
                         rpass.draw(0..3, 0..1);
                     }
 
