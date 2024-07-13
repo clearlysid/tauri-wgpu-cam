@@ -33,7 +33,7 @@ fn main() {
 
                 std::thread::sleep(std::time::Duration::from_secs(1));
 
-                for i in 0..100 {
+                for i in 0..1000 {
                     let buffer = camera.frame().expect("Could not get frame");
                     tx_buffer.send(buffer).expect("Could not send buffer");
                     println!("Frame {i} sent");
@@ -47,14 +47,26 @@ fn main() {
                 let wgpu_state = app_handle.state::<Arc<WgpuState>>();
 
                 while let Ok(buffer) = rx_buffer.recv() {
+
+                    let width = buffer.resolution().width();
+                    let height = buffer.resolution().height();
+
                     let t = Instant::now();
+                    
                     // TODO: this step is very slow
+                    #[cfg(target_os = "windows")]
                     let frame = buffer
                         .decode_image::<RgbAFormat>()
                         .expect("Could not decode frame");
 
-                    let width = buffer.resolution().width();
-                    let height = buffer.resolution().height();
+                    #[cfg(target_os = "macos")]
+                    let uyvy_data = buffer.buffer();
+
+                    #[cfg(target_os = "macos")]
+                    let mut frame = vec![0; uyvy_data.len() * 2];
+
+                    #[cfg(target_os = "macos")]
+                    utils::uyvy_to_rgba(uyvy_data, &mut frame);
 
                     println!("Decoding took: {}", t.elapsed().as_millis());
 
