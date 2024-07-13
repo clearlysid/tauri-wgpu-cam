@@ -29,6 +29,7 @@
         "height": 360,
         "decorations": true,
         "transparent": true,
+        "hiddenTitle": true,
         "titleBarStyle": "Overlay"
       }
     ],
