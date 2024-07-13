@@ -8,8 +8,14 @@ Interestingly, Tauri can also now do multiple "surfaces" in the same window sinc
 
 <img width="1920" alt="Screenshot 2024-07-13 at 10 01 57 AM" src="https://github.com/user-attachments/assets/1c94221b-6c13-4a5b-9f4a-b0fe8a7dd912">
 
-
 And Tauri can comfortably orchestrate interop between the two via events — nice!
+
+## Notes
+
+1. On macOS, the formats reported by the camera capture crate don't match what's reported and the decoding of frames is quite slow.
+2. This demo can be architected a lot better.
+
+Both are fairly straightforward fixes, but out of scope for my work on this repo. Feel free to PR them if you like and I'll be happy to merge it and credit you.
 
 ### References
 
