@@ -6,6 +6,9 @@ One approach was to create WebGPU textures from the buffers and draw them direct
 
 Interestingly, Tauri can also now do multiple "surfaces" in the same window since v2. These surfaces could be Webviews or just regular things you would chuck into a native window, allowing us quite a lot of room for experimentation. Here's a sample of a UI running in Webview rendered over a WebGPU texture in the same window.
 
+<img width="1920" alt="Screenshot 2024-07-13 at 10 01 57 AM" src="https://github.com/user-attachments/assets/1c94221b-6c13-4a5b-9f4a-b0fe8a7dd912">
+
+
 And Tauri can comfortably orchestrate interop between the two via events — nice!
 
 ### References
