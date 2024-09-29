@@ -56,7 +56,7 @@ fn main() {
                     let width = buffer.resolution().width();
                     let height = buffer.resolution().height();
 
-                    println!("Decoding took: {}", t.elapsed().as_millis());
+                    println!("Decoding took: {}ms", t.elapsed().as_millis());
 
                     let texture_size = wgpu::Extent3d {
                         width,
@@ -146,7 +146,7 @@ fn main() {
                     wgpu_state.queue.submit(Some(encoder.finish()));
                     output.present();
 
-                    println!("Frame rendered in: {}", t.elapsed().as_millis());
+                    println!("Frame rendered in: {}ms", t.elapsed().as_millis());
                 }
             });
 

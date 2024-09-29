@@ -1,1 +1,1 @@
-{}
+{"desktop-capability":{"identifier":"desktop-capability","description":"Capabilities for all windows","local":true,"windows":["*"],"permissions":["core:app:default","core:menu:default","core:tray:default","core:path:default","core:event:default","core:window:default","core:resources:default","core:event:allow-emit","core:event:allow-listen","core:window:allow-start-dragging"]}}

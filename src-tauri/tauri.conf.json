@@ -33,18 +33,6 @@
         "titleBarStyle": "Overlay"
       }
     ],
-    "security": {
-      "capabilities": [
-        {
-          "identifier": "drag-start",
-          "windows": [
-            "*"
-          ],
-          "permissions": [
-            "window:allow-start-dragging"
-          ]
-        }
-      ]
-    }
+    "security": {}
   }
 }
