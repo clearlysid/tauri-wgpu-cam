@@ -21,7 +21,7 @@ fn main() {
             app.manage(Arc::new(wgpu_state));
 
             // Create a channel for sending/receiving buffers from the camera
-            let (tx_buffer, rx_buffer) = std::sync::mpsc::channel::<Buffer>();
+            let (tx, rx) = std::sync::mpsc::channel::<Buffer>();
 
             let app_handle = app.app_handle().clone();
 
@@ -33,9 +33,9 @@ fn main() {
 
                 std::thread::sleep(std::time::Duration::from_secs(1));
 
-                for i in 0..100 {
+                for i in 0..1000 {
                     let buffer = camera.frame().expect("Could not get frame");
-                    tx_buffer.send(buffer).expect("Could not send buffer");
+                    tx.send(buffer).expect("Could not send buffer");
                     println!("Frame {i} sent");
                 }
 
@@ -46,15 +46,19 @@ fn main() {
             async_runtime::spawn(async move {
                 let wgpu_state = app_handle.state::<Arc<WgpuState>>();
 
-                while let Ok(buffer) = rx_buffer.recv() {
+                while let Ok(buffer) = rx.recv() {
                     let t = Instant::now();
-                    // TODO: this step is very slow
-                    let frame = buffer
-                        .decode_image::<RgbAFormat>()
-                        .expect("Could not decode frame");
 
+                    let bytes = buffer.buffer();
                     let width = buffer.resolution().width();
                     let height = buffer.resolution().height();
+
+                    // TODO: this step is very slow
+                    // let bytes = buffer
+                    //     .decode_image::<RgbAFormat>()
+                    //     .expect("Could not decode frame");
+
+                    let bytes = utils::yuyv_to_rgba(bytes, width as usize, height as usize);
 
                     println!("Decoding took: {}ms", t.elapsed().as_millis());
 
@@ -82,7 +86,7 @@ fn main() {
                             origin: wgpu::Origin3d::ZERO,
                             aspect: wgpu::TextureAspect::All,
                         },
-                        &frame,
+                        &bytes,
                         wgpu::ImageDataLayout {
                             offset: 0,
                             bytes_per_row: Some(4 * width),
