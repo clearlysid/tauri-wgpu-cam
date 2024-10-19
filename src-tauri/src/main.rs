@@ -46,7 +46,6 @@ fn main() {
 
             async_runtime::spawn(async move {
                 let wgpu_state = app_handle.state::<Arc<WgpuState>>();
-                let compute_pipeline = wgpu_state.create_compute_pipeline().await;
 
                 while let Ok(buffer) = rx.recv() {
                     let t = Instant::now();
@@ -135,7 +134,7 @@ fn main() {
                             label: Some("Compute Pass"),
                             timestamp_writes: None,
                         });
-                        cpass.set_pipeline(&compute_pipeline);
+                        cpass.set_pipeline(&wgpu_state.compute_pipeline);
                         cpass.set_bind_group(0, &bind_group, &[]);
                         cpass.dispatch_workgroups((width + 15) / 16, (height + 15) / 16, 1);
                     }

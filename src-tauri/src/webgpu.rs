@@ -7,6 +7,7 @@ pub struct WgpuState<'win> {
     pub sampler: wgpu::Sampler,
     pub surface: wgpu::Surface<'win>,
     pub render_pipeline: wgpu::RenderPipeline,
+    pub compute_pipeline: wgpu::ComputePipeline,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub config: Mutex<wgpu::SurfaceConfiguration>,
 }
@@ -26,7 +27,7 @@ impl WgpuState<'_> {
             .expect("Failed to find an appropriate adapter");
 
         let limits = wgpu::Limits {
-            max_storage_buffers_per_shader_stage: 8, // Increase this limit as needed
+            max_storage_buffers_per_shader_stage: 8,
             ..Default::default()
         };
 
@@ -119,65 +120,62 @@ impl WgpuState<'_> {
 
         surface.configure(&device, &config);
 
-        Self {
-            device,
-            queue,
-            surface,
-            render_pipeline,
-            config: Mutex::new(config),
-            sampler,
-            bind_group_layout,
-        }
-    }
+        // Create the compute pipeline
+        // Currently it converts YUYV Buffer to RGBA
 
-    pub async fn create_compute_pipeline(&self) -> wgpu::ComputePipeline {
-        let shader = self
-            .device
-            .create_shader_module(wgpu::include_wgsl!("yuyv_to_rgba.wgsl"));
+        let compute_shader = device.create_shader_module(wgpu::include_wgsl!("yuyv_to_rgba.wgsl"));
 
         let compute_bind_group_layout =
-            self.device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
                         },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: false },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
                         },
-                    ],
-                    label: Some("compute_bind_group_layout"),
-                });
+                        count: None,
+                    },
+                ],
+                label: Some("compute_bind_group_layout"),
+            });
 
-        let pipeline_layout = self
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let compute_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: None,
                 push_constant_ranges: &[],
                 bind_group_layouts: &[&compute_bind_group_layout],
             });
 
-        self.device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: None,
-                layout: Some(&pipeline_layout),
-                module: &shader,
-                entry_point: "main",
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            })
+        let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: None,
+            layout: Some(&compute_pipeline_layout),
+            module: &compute_shader,
+            entry_point: "main",
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        });
+
+        Self {
+            queue,
+            device,
+            surface,
+            sampler,
+            render_pipeline,
+            compute_pipeline,
+            bind_group_layout,
+            config: Mutex::new(config),
+        }
     }
 }
