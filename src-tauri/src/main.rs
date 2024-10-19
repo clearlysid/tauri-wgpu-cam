@@ -137,7 +137,7 @@ fn main() {
                         });
                         cpass.set_pipeline(&compute_pipeline);
                         cpass.set_bind_group(0, &bind_group, &[]);
-                        cpass.dispatch_workgroups((width * height / 64) as u32, 1, 1);
+                        cpass.dispatch_workgroups((width + 15) / 16, (height + 15) / 16, 1);
                     }
 
                     let texture_size = wgpu::Extent3d {
