@@ -25,13 +25,17 @@ impl WgpuState<'_> {
             .await
             .expect("Failed to find an appropriate adapter");
 
+        let limits = wgpu::Limits {
+            max_storage_buffers_per_shader_stage: 8, // Increase this limit as needed
+            ..Default::default()
+        };
+
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
                     required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::downlevel_webgl2_defaults()
-                        .using_resolution(adapter.limits()),
+                    required_limits: limits,
                 },
                 None,
             )
@@ -124,5 +128,56 @@ impl WgpuState<'_> {
             sampler,
             bind_group_layout,
         }
+    }
+
+    pub async fn create_compute_pipeline(&self) -> wgpu::ComputePipeline {
+        let shader = self
+            .device
+            .create_shader_module(wgpu::include_wgsl!("yuyv_to_rgba.wgsl"));
+
+        let compute_bind_group_layout =
+            self.device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                    ],
+                    label: Some("compute_bind_group_layout"),
+                });
+
+        let pipeline_layout = self
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: None,
+                push_constant_ranges: &[],
+                bind_group_layouts: &[&compute_bind_group_layout],
+            });
+
+        self.device
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: None,
+                layout: Some(&pipeline_layout),
+                module: &shader,
+                entry_point: "main",
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            })
     }
 }

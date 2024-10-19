@@ -4,10 +4,11 @@
 mod utils;
 mod webgpu;
 
-use nokhwa::{pixel_format::RgbAFormat, Buffer};
+use nokhwa::Buffer;
 use std::{sync::Arc, time::Instant};
 use tauri::{async_runtime, Manager, RunEvent, WindowEvent};
 use webgpu::WgpuState;
+use wgpu::util::DeviceExt;
 
 fn main() {
     tauri::Builder::default()
@@ -45,6 +46,7 @@ fn main() {
 
             async_runtime::spawn(async move {
                 let wgpu_state = app_handle.state::<Arc<WgpuState>>();
+                let compute_pipeline = wgpu_state.create_compute_pipeline().await;
 
                 while let Ok(buffer) = rx.recv() {
                     let t = Instant::now();
@@ -58,9 +60,85 @@ fn main() {
                     //     .decode_image::<RgbAFormat>()
                     //     .expect("Could not decode frame");
 
-                    let bytes = utils::yuyv_to_rgba(bytes, width as usize, height as usize);
+                    // let bytes = utils::yuyv_to_rgba(bytes, width as usize, height as usize);
+                    let yuyv_buffer =
+                        wgpu_state
+                            .device
+                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                label: Some("YUYV Buffer"),
+                                contents: bytes,
+                                usage: wgpu::BufferUsages::STORAGE,
+                            });
 
-                    println!("Decoding took: {}ms", t.elapsed().as_millis());
+                    let rgba_buffer = wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
+                        label: Some("RGBA Buffer"),
+                        size: (width * height * 4) as u64,
+                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+                        mapped_at_creation: false,
+                    });
+
+                    let compute_bind_group_layout = wgpu_state.device.create_bind_group_layout(
+                        &wgpu::BindGroupLayoutDescriptor {
+                            entries: &[
+                                wgpu::BindGroupLayoutEntry {
+                                    binding: 0,
+                                    visibility: wgpu::ShaderStages::COMPUTE,
+                                    ty: wgpu::BindingType::Buffer {
+                                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                        has_dynamic_offset: false,
+                                        min_binding_size: None,
+                                    },
+                                    count: None,
+                                },
+                                wgpu::BindGroupLayoutEntry {
+                                    binding: 1,
+                                    visibility: wgpu::ShaderStages::COMPUTE,
+                                    ty: wgpu::BindingType::Buffer {
+                                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                        has_dynamic_offset: false,
+                                        min_binding_size: None,
+                                    },
+                                    count: None,
+                                },
+                            ],
+                            label: Some("compute_bind_group_layout"),
+                        },
+                    );
+
+                    let bind_group =
+                        wgpu_state
+                            .device
+                            .create_bind_group(&wgpu::BindGroupDescriptor {
+                                layout: &compute_bind_group_layout,
+                                entries: &[
+                                    wgpu::BindGroupEntry {
+                                        binding: 0,
+                                        resource: yuyv_buffer.as_entire_binding(),
+                                    },
+                                    wgpu::BindGroupEntry {
+                                        binding: 1,
+                                        resource: rgba_buffer.as_entire_binding(),
+                                    },
+                                ],
+                                label: None,
+                            });
+
+                    let mut encoder =
+                        wgpu_state
+                            .device
+                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: Some("Compute Encoder"),
+                            });
+
+                    {
+                        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                            label: Some("Compute Pass"),
+                            timestamp_writes: None,
+                        });
+                        cpass.set_pipeline(&compute_pipeline);
+                        cpass.set_bind_group(0, &bind_group, &[]);
+                        cpass.dispatch_workgroups((width * height / 64) as u32, 1, 1);
+                    }
 
                     let texture_size = wgpu::Extent3d {
                         width,
@@ -79,21 +157,25 @@ fn main() {
                         view_formats: &[],
                     });
 
-                    wgpu_state.queue.write_texture(
+                    encoder.copy_buffer_to_texture(
+                        wgpu::ImageCopyBuffer {
+                            buffer: &rgba_buffer,
+                            layout: wgpu::ImageDataLayout {
+                                offset: 0,
+                                bytes_per_row: Some(4 * width),
+                                rows_per_image: Some(height),
+                            },
+                        },
                         wgpu::ImageCopyTexture {
                             texture: &texture,
                             mip_level: 0,
                             origin: wgpu::Origin3d::ZERO,
                             aspect: wgpu::TextureAspect::All,
                         },
-                        &bytes,
-                        wgpu::ImageDataLayout {
-                            offset: 0,
-                            bytes_per_row: Some(4 * width),
-                            rows_per_image: Some(height),
-                        },
                         texture_size,
                     );
+
+                    wgpu_state.queue.submit(Some(encoder.finish()));
 
                     let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
                     let bind_group =
