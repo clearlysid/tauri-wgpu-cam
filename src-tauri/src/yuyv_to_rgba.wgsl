@@ -3,8 +3,8 @@
 
 @compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let width = 1280u; // Replace with the actual width of your image
-    let height = 720u; // Replace with the actual height of your image
+    let width = 1920u; // Replace with the actual width of your image
+    let height = 1080u; // Replace with the actual height of your image
 
     let x = global_id.x;
     let y = global_id.y;

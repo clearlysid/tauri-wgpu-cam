@@ -11,8 +11,8 @@ pub fn create_camera() -> Camera {
 
     let format =
         RequestedFormat::new::<RgbAFormat>(RequestedFormatType::HighestResolution(Resolution {
-            width_x: 1280,
-            height_y: 720,
+            width_x: 1920,
+            height_y: 1080,
         }));
 
     Camera::new(device.index().to_owned(), format).expect("Could not create camera")
