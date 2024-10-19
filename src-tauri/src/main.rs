@@ -4,7 +4,7 @@
 mod utils;
 mod webgpu;
 
-use nokhwa::{pixel_format::RgbAFormat, Buffer};
+use nokhwa::Buffer;
 use std::{sync::Arc, time::Instant};
 use tauri::{async_runtime, Manager, RunEvent, WindowEvent};
 use webgpu::WgpuState;
@@ -53,102 +53,17 @@ fn main() {
                     let width = buffer.resolution().width();
                     let height = buffer.resolution().height();
 
-                    // TODO: this step is very slow
-                    // let bytes = buffer
-                    //     .decode_image::<RgbAFormat>()
-                    //     .expect("Could not decode frame");
+                    // Approach 1 (SLOW)
+                    // Decode RgbAFormat via Nokhwa
+                    // let rgba_bytes = buffer.decode_image::<RgbAFormat>().unwrap();
 
-                    let bytes = utils::yuyv_to_rgba(bytes, width as usize, height as usize);
+                    // Approach 2 (FAST)
+                    // Convert YUYV to RGBA using Rayon
+                    // let rgba_bytes = utils::yuyv_to_rgba(bytes, width as usize, height as usize);
 
-                    println!("Decoding took: {}ms", t.elapsed().as_millis());
-
-                    let texture_size = wgpu::Extent3d {
-                        width,
-                        height,
-                        depth_or_array_layers: 1,
-                    };
-
-                    let texture = wgpu_state.device.create_texture(&wgpu::TextureDescriptor {
-                        label: None,
-                        sample_count: 1,
-                        mip_level_count: 1,
-                        size: texture_size,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                        view_formats: &[],
-                    });
-
-                    wgpu_state.queue.write_texture(
-                        wgpu::ImageCopyTexture {
-                            texture: &texture,
-                            mip_level: 0,
-                            origin: wgpu::Origin3d::ZERO,
-                            aspect: wgpu::TextureAspect::All,
-                        },
-                        &bytes,
-                        wgpu::ImageDataLayout {
-                            offset: 0,
-                            bytes_per_row: Some(4 * width),
-                            rows_per_image: Some(height),
-                        },
-                        texture_size,
-                    );
-
-                    let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-                    let bind_group =
-                        wgpu_state
-                            .device
-                            .create_bind_group(&wgpu::BindGroupDescriptor {
-                                layout: &wgpu_state.bind_group_layout,
-                                entries: &[
-                                    wgpu::BindGroupEntry {
-                                        binding: 0,
-                                        resource: wgpu::BindingResource::TextureView(&texture_view),
-                                    },
-                                    wgpu::BindGroupEntry {
-                                        binding: 1,
-                                        resource: wgpu::BindingResource::Sampler(
-                                            &wgpu_state.sampler,
-                                        ),
-                                    },
-                                ],
-                                label: None,
-                            });
-
-                    let output = wgpu_state
-                        .surface
-                        .get_current_texture()
-                        .expect("Failed to acquire next swap chain texture");
-                    let view = output
-                        .texture
-                        .create_view(&wgpu::TextureViewDescriptor::default());
-
-                    let mut encoder = wgpu_state
-                        .device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-                    {
-                        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                            label: None,
-                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: &view,
-                                resolve_target: None,
-                                ops: wgpu::Operations {
-                                    load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
-                                    store: wgpu::StoreOp::Store,
-                                },
-                            })],
-                            depth_stencil_attachment: None,
-                            timestamp_writes: None,
-                            occlusion_query_set: None,
-                        });
-                        rpass.set_pipeline(&wgpu_state.render_pipeline);
-                        rpass.set_bind_group(0, &bind_group, &[]);
-                        rpass.draw(0..6, 0..1);
-                    }
-
-                    wgpu_state.queue.submit(Some(encoder.finish()));
-                    output.present();
+                    // Approach 3 (FASTEST)
+                    // Convert YUYV to RGBA using wgpu compute shader
+                    wgpu_state.render_yuyv_bytes(bytes, width, height);
 
                     println!("Frame rendered in: {}ms", t.elapsed().as_millis());
                 }
